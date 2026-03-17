@@ -39,6 +39,14 @@ function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
+        <div className="fixed inset-0 -z-10 bg-slate-800">
+          <img
+            src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=2000&q=80"
+            alt="Mountain Background"
+            referrerPolicy="no-referrer"
+            className="w-full h-full object-cover opacity-90"
+          />
+        </div>
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={

@@ -7,10 +7,6 @@
 }
 
 body {
-  background-image: url('https://images.unsplash.com/photo-1543632731-29177d4eb890?q=80&w=2000');
-  background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
   background-color: #f3f4f6;
 }
 
