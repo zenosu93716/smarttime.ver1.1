@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth, isSameDay } from 'date-fns';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getHoliday } from '../utils/date';
+import { PART_COLORS } from '../utils/colors';
 import { ScheduleModal } from '../components/ScheduleModal';
 import { DayDetailModal } from '../components/DayDetailModal';
-import { getSchedules, Schedule } from '../services/dbService';
+import { getSchedules, Schedule, getUserProfile } from '../services/dbService';
 
 export const Dashboard = () => {
   const { userProfile } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [schedules, setSchedules] = useState<(Schedule & { role?: string })[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isDayDetailModalOpen, setIsDayDetailModalOpen] = useState(false);
@@ -18,11 +20,25 @@ export const Dashboard = () => {
 
   const fetchSchedules = async () => {
     if (!userProfile) return;
+    setIsLoading(true);
     try {
       const data = await getSchedules(userProfile.uid, userProfile.role);
-      setSchedules(data);
+      
+      // Fetch roles for each schedule to apply correct colors
+      const schedulesWithRoles = await Promise.all(data.map(async (schedule) => {
+        try {
+          const profile = await getUserProfile(schedule.userId);
+          return { ...schedule, role: profile?.role || '기타' };
+        } catch {
+          return { ...schedule, role: '기타' };
+        }
+      }));
+      
+      setSchedules(schedulesWithRoles);
     } catch (error) {
       console.error(error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -53,7 +69,7 @@ export const Dashboard = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-white rounded-2xl shadow-sm border border-gray-200">
+    <div className="h-full flex flex-col bg-white rounded-2xl shadow-sm border border-gray-200 relative">
       {/* Header */}
       <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
         <div className="flex items-center space-x-4">
@@ -68,6 +84,7 @@ export const Dashboard = () => {
               <ChevronRight size={20} />
             </button>
           </div>
+          {isLoading && <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />}
         </div>
         <button
           onClick={() => { setSelectedDate(new Date()); setIsScheduleModalOpen(true); }}
@@ -127,15 +144,18 @@ export const Dashboard = () => {
                 </div>
                 
                 <div className="flex-1 overflow-y-auto space-y-1 no-scrollbar">
-                  {displaySchedules.map((schedule) => (
-                    <div
-                      key={schedule.id}
-                      className="text-[11px] px-1.5 py-0.5 rounded truncate bg-indigo-50 text-indigo-700 border border-indigo-100"
-                      title={`${schedule.userName} - ${schedule.title}`}
-                    >
-                      <span className="font-medium">{schedule.userName}</span> {schedule.title}
-                    </div>
-                  ))}
+                  {displaySchedules.map((schedule) => {
+                    const colors = PART_COLORS[schedule.role || '기타'] || PART_COLORS['기타'];
+                    return (
+                      <div
+                        key={schedule.id}
+                        className={`text-[11px] px-1.5 py-0.5 rounded truncate border ${colors.bg} ${colors.text} ${colors.border}`}
+                        title={`${schedule.userName} - ${schedule.title}`}
+                      >
+                        <span className="font-medium">{schedule.userName}</span> {schedule.title}
+                      </div>
+                    );
+                  })}
                   {hasMore && (
                     <div 
                       onClick={(e) => handleMoreClick(e, day)}

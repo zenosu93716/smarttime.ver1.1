@@ -48,7 +48,7 @@ const Signup: React.FC = () => {
       animate={{ opacity: 1, y: 0 }}
       className="min-h-[80vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8"
     >
-      <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-2xl shadow-xl border border-gray-100">
+      <div className="max-w-md w-full space-y-8 bg-white/95 backdrop-blur-sm p-10 rounded-2xl shadow-2xl border border-white/20">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 tracking-tight">
             사용자 등록

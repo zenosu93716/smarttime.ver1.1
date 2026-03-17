@@ -32,13 +32,13 @@ const Login: React.FC = () => {
       animate={{ opacity: 1, y: 0 }}
       className="min-h-[80vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8"
     >
-      <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-2xl shadow-xl border border-gray-100">
+      <div className="max-w-md w-full space-y-8 bg-white/95 backdrop-blur-sm p-10 rounded-2xl shadow-2xl border border-white/20">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 tracking-tight">
             시스템 로그인
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            공공기관 스마트 일정관리 시스템에 오신 것을 환영합니다.
+            스마트 일정관리 시스템에 오신 것을 환영합니다.
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
