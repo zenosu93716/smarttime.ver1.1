@@ -2,47 +2,74 @@
   "entities": {
     "User": {
       "title": "User",
-      "description": "Employee profile and role information",
+      "description": "사용자 정보",
       "type": "object",
       "properties": {
-        "uid": { "type": "string" },
-        "email": { "type": "string", "format": "email" },
-        "name": { "type": "string" },
-        "role": { "type": "string", "enum": ["admin", "user"] },
-        "part": { "type": "string", "enum": ["1파트", "2파트", "3파트", "4파트", "5파트", "팀장", "부팀장", "기타"] },
-        "position": { "type": "string", "enum": ["팀장", "부팀장", "파트장", "상담사", "팀원"] },
-        "profilePic": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "email": { "type": "string", "description": "이메일" },
+        "name": { "type": "string", "description": "이름" },
+        "role": { "type": "string", "enum": ["일반직원", "팀장", "부팀장", "사례관리사", "파트장"], "description": "권한" },
+        "department": { "type": "string", "description": "부서" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "생성일" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "수정일" }
       },
-      "required": ["uid", "email", "name", "role", "part", "position", "createdAt"]
+      "required": ["email", "name", "role", "createdAt", "updatedAt"]
     },
     "Schedule": {
       "title": "Schedule",
-      "description": "Employee work or leave schedule",
+      "description": "일정 정보",
       "type": "object",
       "properties": {
-        "userId": { "type": "string" },
-        "userName": { "type": "string" },
-        "part": { "type": "string" },
-        "type": { "type": "string", "enum": ["1근", "2근", "야근", "휴일근무", "연차", "시간연차", "병가", "시간병가", "공가", "특별휴가", "출산전후휴가", "배우자출산휴가", "가족돌봄휴가", "생리휴가", "포상휴가"] },
-        "date": { "type": "string", "description": "YYYY-MM-DD" },
-        "startTime": { "type": "string" },
-        "endTime": { "type": "string" },
-        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "userId": { "type": "string", "description": "사용자 ID" },
+        "userName": { "type": "string", "description": "사용자 이름" },
+        "title": { "type": "string", "description": "일정 제목" },
+        "description": { "type": "string", "description": "일정 상세" },
+        "date": { "type": "string", "description": "날짜 (YYYY-MM-DD)" },
+        "fileUrl": { "type": "string", "description": "첨부파일 URL" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "생성일" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "수정일" }
       },
-      "required": ["userId", "userName", "part", "type", "date", "status", "createdAt", "updatedAt"]
+      "required": ["userId", "userName", "title", "date", "createdAt", "updatedAt"]
+    },
+    "AuthLog": {
+      "title": "AuthLog",
+      "description": "로그인 기록",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "이메일" },
+        "status": { "type": "string", "enum": ["SUCCESS", "FAIL"], "description": "상태" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "시간" }
+      },
+      "required": ["email", "status", "timestamp"]
+    },
+    "ErrorLog": {
+      "title": "ErrorLog",
+      "description": "에러 기록",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "사용자 ID" },
+        "errorMessage": { "type": "string", "description": "에러 메시지" },
+        "context": { "type": "string", "description": "상황/위치" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "시간" }
+      },
+      "required": ["errorMessage", "timestamp"]
     }
   },
   "firestore": {
-    "/users/{userId}": {
+    "users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
-      "description": "Stores user profiles"
+      "description": "사용자 컬렉션"
     },
-    "/schedules/{scheduleId}": {
+    "schedules/{scheduleId}": {
       "schema": { "$ref": "#/entities/Schedule" },
-      "description": "Stores employee schedules"
+      "description": "일정 컬렉션"
+    },
+    "auth_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuthLog" },
+      "description": "로그인 기록 컬렉션"
+    },
+    "error_logs/{logId}": {
+      "schema": { "$ref": "#/entities/ErrorLog" },
+      "description": "에러 기록 컬렉션"
     }
   }
 }

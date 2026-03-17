@@ -1,168 +1,143 @@
 import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase';
-import { useAuth } from '../contexts/AuthContext';
 import { format } from 'date-fns';
-import { X } from 'lucide-react';
+import { X, Upload, File as FileIcon } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { createSchedule } from '../services/dbService';
+import { uploadFile } from '../services/storageService';
 
-const scheduleSchema = z.object({
-  type: z.enum(['1근', '2근', '야근', '휴일근무', '연차', '시간연차', '병가', '시간병가', '공가', '특별휴가', '출산전후휴가', '배우자출산휴가', '가족돌봄휴가', '생리휴가', '포상휴가']),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD 형식이어야 합니다.'),
-  startTime: z.string().optional(),
-  endTime: z.string().optional(),
-});
-
-type ScheduleForm = z.infer<typeof scheduleSchema>;
-
-interface Props {
+interface ScheduleModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedDate: Date;
 }
 
-export const ScheduleModal: React.FC<Props> = ({ isOpen, onClose, selectedDate }) => {
-  const { user, profile } = useAuth();
+export const ScheduleModal: React.FC<ScheduleModalProps> = ({ isOpen, onClose, selectedDate }) => {
+  const { userProfile } = useAuth();
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const { register, handleSubmit, formState: { errors } } = useForm<ScheduleForm>({
-    resolver: zodResolver(scheduleSchema),
-    defaultValues: {
-      date: format(selectedDate, 'yyyy-MM-dd'),
-      type: '1근'
-    }
-  });
+  if (!isOpen || !userProfile) return null;
 
-  const onSubmit = async (data: ScheduleForm) => {
-    if (!user || !profile) return;
-    
-    setLoading(true);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError('');
+    setLoading(true);
 
     try {
-      await addDoc(collection(db, 'schedules'), {
-        userId: user.uid,
-        userName: profile.name,
-        part: profile.part,
-        type: data.type,
-        date: data.date,
-        startTime: data.startTime || null,
-        endTime: data.endTime || null,
-        status: 'pending', // Admins will approve
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+      let fileUrl = '';
+      if (file) {
+        fileUrl = await uploadFile(file, userProfile.uid);
+      }
+
+      await createSchedule({
+        userId: userProfile.uid,
+        userName: userProfile.name,
+        title,
+        description,
+        date: format(selectedDate, 'yyyy-MM-dd'),
+        fileUrl,
       });
+
       onClose();
     } catch (err: any) {
-      setError(err.message || '스케줄 등록에 실패했습니다.');
+      setError(err.message || '일정 등록에 실패했습니다.');
     } finally {
       setLoading(false);
     }
   };
 
-  if (!isOpen) return null;
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
+    }
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden overflow-y-auto outline-none focus:outline-none bg-black/50 backdrop-blur-sm">
-      <div className="relative w-full max-w-md mx-auto my-6">
-        <div className="relative flex flex-col w-full bg-white border-0 rounded-2xl shadow-2xl outline-none focus:outline-none">
-          <div className="flex items-start justify-between p-5 border-b border-solid border-gray-200 rounded-t-2xl">
-            <h3 className="text-xl font-bold text-gray-900">
-              스케줄 등록
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+        <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={onClose} />
+
+        <div className="relative inline-block w-full max-w-lg p-6 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="text-lg font-bold text-gray-900">
+              {format(selectedDate, 'yyyy년 MM월 dd일')} 일정 등록
             </h3>
-            <button
-              className="p-1 ml-auto bg-transparent border-0 text-gray-400 hover:text-gray-900 float-right text-3xl leading-none font-semibold outline-none focus:outline-none transition-colors"
-              onClick={onClose}
-            >
-              <X size={24} />
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-500 focus:outline-none">
+              <X size={20} />
             </button>
           </div>
-          <div className="relative p-6 flex-auto">
-            {error && (
-              <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-            )}
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">날짜</label>
-                <input
-                  type="date"
-                  {...register('date')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                />
-                {errors.date && <p className="mt-1 text-sm text-red-600">{errors.date.message}</p>}
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">근무/휴가 종류</label>
-                <select
-                  {...register('type')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                >
-                  <optgroup label="근무">
-                    <option value="1근">1근 (오전/주간)</option>
-                    <option value="2근">2근 (오후/야간)</option>
-                    <option value="야근">야근</option>
-                    <option value="휴일근무">휴일근무</option>
-                  </optgroup>
-                  <optgroup label="연차/휴가">
-                    <option value="연차">연차</option>
-                    <option value="시간연차">시간연차 (반차 등)</option>
-                    <option value="병가">병가</option>
-                    <option value="시간병가">시간병가</option>
-                    <option value="공가">공가 (예비군, 민방위 등)</option>
-                    <option value="특별휴가">특별휴가 (경조사 등)</option>
-                    <option value="출산전후휴가">출산전후휴가</option>
-                    <option value="배우자출산휴가">배우자 출산휴가</option>
-                    <option value="가족돌봄휴가">가족돌봄휴가</option>
-                    <option value="생리휴가">생리휴가</option>
-                    <option value="포상휴가">포상휴가</option>
-                  </optgroup>
-                </select>
-                {errors.type && <p className="mt-1 text-sm text-red-600">{errors.type.message}</p>}
-              </div>
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-md border border-red-200">
+              {error}
+            </div>
+          )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">시작 시간 (선택)</label>
-                  <input
-                    type="time"
-                    {...register('startTime')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">종료 시간 (선택)</label>
-                  <input
-                    type="time"
-                    {...register('endTime')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  />
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">제목</label>
+              <input
+                type="text"
+                required
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                placeholder="일정 제목을 입력하세요"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">상세 내용</label>
+              <textarea
+                rows={3}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm resize-none"
+                placeholder="상세 내용을 입력하세요 (선택)"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">첨부파일 (최대 5MB, JPG/PNG/PDF/DOC)</label>
+              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:bg-gray-50 transition-colors">
+                <div className="space-y-1 text-center">
+                  <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                  <div className="flex text-sm text-gray-600 justify-center">
+                    <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
+                      <span>파일 선택</span>
+                      <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} accept=".jpg,.jpeg,.png,.pdf,.doc,.docx" />
+                    </label>
+                  </div>
+                  {file && (
+                    <div className="text-sm text-gray-500 flex items-center justify-center mt-2">
+                      <FileIcon className="h-4 w-4 mr-1" />
+                      {file.name}
+                    </div>
+                  )}
                 </div>
               </div>
+            </div>
 
-              <div className="flex items-center justify-end pt-6 border-t border-solid border-gray-200 rounded-b">
-                <button
-                  className="text-gray-500 bg-transparent hover:bg-gray-100 font-medium px-6 py-2 text-sm outline-none focus:outline-none mr-2 mb-1 rounded-lg transition-colors"
-                  type="button"
-                  onClick={onClose}
-                >
-                  취소
-                </button>
-                <button
-                  className="bg-indigo-600 text-white hover:bg-indigo-700 font-medium text-sm px-6 py-2 rounded-lg shadow hover:shadow-lg outline-none focus:outline-none mr-1 mb-1 transition-all disabled:opacity-50"
-                  type="submit"
-                  disabled={loading}
-                >
-                  {loading ? '등록 중...' : '등록하기'}
-                </button>
-              </div>
-            </form>
-          </div>
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                취소
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+              >
+                {loading ? '등록 중...' : '등록'}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>

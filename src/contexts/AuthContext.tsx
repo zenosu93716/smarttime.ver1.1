@@ -1,74 +1,86 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { auth, db } from '../firebase';
-
-export interface UserProfile {
-  uid: string;
-  email: string;
-  name: string;
-  role: 'admin' | 'user';
-  part: string;
-  position: string;
-  profilePic?: string;
-  createdAt: any;
-}
+import { User as FirebaseUser } from 'firebase/auth';
+import { subscribeToAuthChanges, logoutUser } from '../services/authService';
+import { getUserProfile, User as AppUser } from '../services/dbService';
 
 interface AuthContextType {
-  user: FirebaseUser | null;
-  profile: UserProfile | null;
+  currentUser: FirebaseUser | null;
+  userProfile: AppUser | null;
   loading: boolean;
+  logout: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({ user: null, profile: null, loading: true });
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => useContext(AuthContext);
+const AUTO_LOGOUT_TIME = 30 * 60 * 1000; // 30 minutes
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [userProfile, setUserProfile] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let unsubscribeProfile: (() => void) | undefined;
-
-    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-      
-      if (firebaseUser) {
-        const docRef = doc(db, 'users', firebaseUser.uid);
-        unsubscribeProfile = onSnapshot(docRef, (docSnap) => {
-          if (docSnap.exists()) {
-            setProfile(docSnap.data() as UserProfile);
-          } else {
-            setProfile(null);
-          }
-          setLoading(false);
-        }, (error) => {
-          console.error("Error fetching user profile:", error);
-          setProfile(null);
-          setLoading(false);
-        });
-      } else {
-        setProfile(null);
-        setLoading(false);
-        if (unsubscribeProfile) {
-          unsubscribeProfile();
+    const unsubscribe = subscribeToAuthChanges(async (user) => {
+      setCurrentUser(user);
+      if (user) {
+        try {
+          const profile = await getUserProfile(user.uid);
+          setUserProfile(profile);
+        } catch (error) {
+          console.error('Failed to fetch user profile', error);
+          setUserProfile(null);
         }
+      } else {
+        setUserProfile(null);
       }
+      setLoading(false);
     });
 
-    return () => {
-      unsubscribeAuth();
-      if (unsubscribeProfile) {
-        unsubscribeProfile();
-      }
-    };
+    return () => unsubscribe();
   }, []);
 
+  // Auto logout logic
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (currentUser) {
+        timeoutId = setTimeout(() => {
+          logoutUser();
+          alert('보안을 위해 자동 로그아웃 되었습니다.');
+        }, AUTO_LOGOUT_TIME);
+      }
+    };
+
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    
+    if (currentUser) {
+      resetTimer();
+      events.forEach(event => window.addEventListener(event, resetTimer));
+    }
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      events.forEach(event => window.removeEventListener(event, resetTimer));
+    };
+  }, [currentUser]);
+
+  const logout = async () => {
+    await logoutUser();
+  };
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading }}>
-      {children}
+    <AuthContext.Provider value={{ currentUser, userProfile, loading, logout }}>
+      {!loading && children}
     </AuthContext.Provider>
   );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 };

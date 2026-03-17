@@ -1,29 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { format, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth, isSameDay, parseISO } from 'date-fns';
-import { ko } from 'date-fns/locale';
+import { format, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth, isSameDay } from 'date-fns';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import { collection, query, onSnapshot, where } from 'firebase/firestore';
-import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { getHoliday } from '../utils/date';
-import { PART_COLORS } from '../utils/colors';
 import { ScheduleModal } from '../components/ScheduleModal';
 import { DayDetailModal } from '../components/DayDetailModal';
-
-export interface Schedule {
-  id: string;
-  userId: string;
-  userName: string;
-  part: string;
-  type: string;
-  date: string;
-  startTime?: string;
-  endTime?: string;
-  status: 'pending' | 'approved' | 'rejected';
-}
+import { getSchedules, Schedule } from '../services/dbService';
 
 export const Dashboard = () => {
-  const { profile } = useAuth();
+  const { userProfile } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
@@ -31,32 +16,19 @@ export const Dashboard = () => {
   const [isDayDetailModalOpen, setIsDayDetailModalOpen] = useState(false);
   const [dayDetailDate, setDayDetailDate] = useState<Date | null>(null);
 
+  const fetchSchedules = async () => {
+    if (!userProfile) return;
+    try {
+      const data = await getSchedules(userProfile.uid, userProfile.role);
+      setSchedules(data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   useEffect(() => {
-    // Fetch schedules for the current month
-    const start = startOfWeek(startOfMonth(currentDate));
-    const end = endOfWeek(endOfMonth(currentDate));
-    
-    const startStr = format(start, 'yyyy-MM-dd');
-    const endStr = format(end, 'yyyy-MM-dd');
-
-    const q = query(
-      collection(db, 'schedules'),
-      where('date', '>=', startStr),
-      where('date', '<=', endStr)
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedSchedules = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Schedule[];
-      setSchedules(fetchedSchedules);
-    }, (error) => {
-      console.error("Error fetching schedules:", error);
-    });
-
-    return () => unsubscribe();
-  }, [currentDate]);
+    fetchSchedules();
+  }, [currentDate, userProfile]);
 
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
   const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
@@ -102,7 +74,7 @@ export const Dashboard = () => {
           className="flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
         >
           <Plus size={16} className="mr-2" />
-          스케줄 등록
+          일정 등록
         </button>
       </div>
 
@@ -155,20 +127,15 @@ export const Dashboard = () => {
                 </div>
                 
                 <div className="flex-1 overflow-y-auto space-y-1 no-scrollbar">
-                  {displaySchedules.map((schedule) => {
-                    const colors = PART_COLORS[schedule.part] || PART_COLORS['기타'];
-                    return (
-                      <div
-                        key={schedule.id}
-                        className={`text-[11px] px-1.5 py-0.5 rounded truncate ${colors.bg} ${colors.text} ${
-                          schedule.status === 'pending' ? 'opacity-60 border border-dashed ' + colors.border : ''
-                        }`}
-                        title={`${schedule.userName} - ${schedule.type}`}
-                      >
-                        <span className="font-medium">{schedule.userName}</span> {schedule.type}
-                      </div>
-                    );
-                  })}
+                  {displaySchedules.map((schedule) => (
+                    <div
+                      key={schedule.id}
+                      className="text-[11px] px-1.5 py-0.5 rounded truncate bg-indigo-50 text-indigo-700 border border-indigo-100"
+                      title={`${schedule.userName} - ${schedule.title}`}
+                    >
+                      <span className="font-medium">{schedule.userName}</span> {schedule.title}
+                    </div>
+                  ))}
                   {hasMore && (
                     <div 
                       onClick={(e) => handleMoreClick(e, day)}
@@ -187,7 +154,10 @@ export const Dashboard = () => {
       {isScheduleModalOpen && selectedDate && (
         <ScheduleModal 
           isOpen={isScheduleModalOpen} 
-          onClose={() => setIsScheduleModalOpen(false)} 
+          onClose={() => {
+            setIsScheduleModalOpen(false);
+            fetchSchedules();
+          }} 
           selectedDate={selectedDate} 
         />
       )}
@@ -195,7 +165,10 @@ export const Dashboard = () => {
       {isDayDetailModalOpen && dayDetailDate && (
         <DayDetailModal
           isOpen={isDayDetailModalOpen}
-          onClose={() => setIsDayDetailModalOpen(false)}
+          onClose={() => {
+            setIsDayDetailModalOpen(false);
+            fetchSchedules();
+          }}
           date={dayDetailDate}
           schedules={schedules.filter(s => s.date === format(dayDetailDate, 'yyyy-MM-dd'))}
         />

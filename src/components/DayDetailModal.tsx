@@ -1,75 +1,114 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { format } from 'date-fns';
-import { X } from 'lucide-react';
-import { Schedule } from '../pages/Dashboard';
-import { PART_COLORS, STATUS_COLORS } from '../utils/colors';
+import { X, Trash2, FileText, Download } from 'lucide-react';
+import { Schedule, deleteSchedule } from '../services/dbService';
+import { useAuth } from '../contexts/AuthContext';
+import { deleteFile } from '../services/storageService';
 
-interface Props {
+interface DayDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   date: Date;
   schedules: Schedule[];
 }
 
-export const DayDetailModal: React.FC<Props> = ({ isOpen, onClose, date, schedules }) => {
-  if (!isOpen) return null;
+export const DayDetailModal: React.FC<DayDetailModalProps> = ({ isOpen, onClose, date, schedules }) => {
+  const { userProfile } = useAuth();
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  if (!isOpen || !userProfile) return null;
+
+  const handleDelete = async (schedule: Schedule) => {
+    if (!window.confirm('정말 이 일정을 삭제하시겠습니까?')) return;
+    
+    setLoadingId(schedule.id);
+    try {
+      if (schedule.fileUrl) {
+        await deleteFile(schedule.fileUrl, userProfile.uid);
+      }
+      await deleteSchedule(schedule.id, userProfile.uid);
+      onClose(); // Refresh handled by parent
+    } catch (error) {
+      alert('삭제에 실패했습니다.');
+    } finally {
+      setLoadingId(null);
+    }
+  };
+
+  const canDelete = (schedule: Schedule) => {
+    return schedule.userId === userProfile.uid || ['팀장', '부팀장', '사례관리사', '파트장'].includes(userProfile.role);
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden overflow-y-auto outline-none focus:outline-none bg-black/50 backdrop-blur-sm">
-      <div className="relative w-full max-w-lg mx-auto my-6">
-        <div className="relative flex flex-col w-full bg-white border-0 rounded-2xl shadow-2xl outline-none focus:outline-none">
-          <div className="flex items-start justify-between p-5 border-b border-solid border-gray-200 rounded-t-2xl">
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+        <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={onClose} />
+
+        <div className="relative inline-block w-full max-w-2xl p-6 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+          <div className="flex items-center justify-between mb-5 border-b pb-4">
             <h3 className="text-xl font-bold text-gray-900">
-              {format(date, 'yyyy년 MM월 dd일')} 스케줄
+              {format(date, 'yyyy년 MM월 dd일')} 상세 일정
             </h3>
-            <button
-              className="p-1 ml-auto bg-transparent border-0 text-gray-400 hover:text-gray-900 float-right text-3xl leading-none font-semibold outline-none focus:outline-none transition-colors"
-              onClick={onClose}
-            >
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-500 focus:outline-none">
               <X size={24} />
             </button>
           </div>
-          <div className="relative p-6 flex-auto max-h-[60vh] overflow-y-auto">
+
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
             {schedules.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">등록된 스케줄이 없습니다.</p>
-            ) : (
-              <div className="space-y-3">
-                {schedules.map((schedule) => {
-                  const partColor = PART_COLORS[schedule.part] || PART_COLORS['기타'];
-                  const statusColor = STATUS_COLORS[schedule.status];
-                  
-                  return (
-                    <div key={schedule.id} className={`p-4 rounded-xl border ${partColor.border} bg-white shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4`}>
-                      <div className="flex items-center space-x-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${partColor.bg} ${partColor.text}`}>
-                          {schedule.userName.charAt(0)}
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-gray-900">{schedule.userName} <span className="text-xs font-normal text-gray-500 ml-1">{schedule.part}</span></p>
-                          <p className="text-sm text-gray-600 font-medium">{schedule.type}</p>
-                          {(schedule.startTime || schedule.endTime) && (
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              {schedule.startTime || '?'} ~ {schedule.endTime || '?'}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusColor.bg} ${statusColor.text}`}>
-                          {schedule.status === 'pending' ? '승인 대기' : schedule.status === 'approved' ? '승인 완료' : '반려됨'}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="text-center py-8 text-gray-500">
+                등록된 일정이 없습니다.
               </div>
+            ) : (
+              schedules.map((schedule) => (
+                <div key={schedule.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200 shadow-sm relative">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h4 className="text-lg font-semibold text-gray-900">{schedule.title}</h4>
+                      <p className="text-sm text-gray-500 font-medium">{schedule.userName}</p>
+                    </div>
+                    {canDelete(schedule) && (
+                      <button
+                        onClick={() => handleDelete(schedule)}
+                        disabled={loadingId === schedule.id}
+                        className="text-red-500 hover:text-red-700 p-1 rounded-md hover:bg-red-50 transition-colors disabled:opacity-50"
+                        title="일정 삭제"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    )}
+                  </div>
+                  
+                  {schedule.description && (
+                    <div className="mt-3 text-gray-700 text-sm whitespace-pre-wrap bg-white p-3 rounded border border-gray-100">
+                      {schedule.description}
+                    </div>
+                  )}
+
+                  {schedule.fileUrl && (
+                    <div className="mt-4 flex items-center">
+                      <a
+                        href={schedule.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                      >
+                        <FileText size={14} className="mr-1.5 text-gray-400" />
+                        첨부파일 보기
+                        <Download size={14} className="ml-1.5 text-gray-400" />
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ))
             )}
           </div>
-          <div className="flex items-center justify-end p-6 border-t border-solid border-gray-200 rounded-b">
+
+          <div className="mt-6 flex justify-end">
             <button
-              className="bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium text-sm px-6 py-2 rounded-lg transition-colors outline-none focus:outline-none"
               type="button"
               onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
               닫기
             </button>
